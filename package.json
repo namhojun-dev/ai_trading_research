@@ -1,5 +1,5 @@
 {
-  "name": "lifeos-ai",
+  "name": "ai-trading-research",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,7 +7,6 @@
     "build": "next build",
     "start": "next start",
     "test:kfin": "node scripts/kfin-smoke.mjs",
-    "test:lifeos": "node scripts/lifeos-smoke.mjs",
     "lint": "next lint"
   },
   "overrides": {
@@ -15,12 +14,9 @@
     "postcss": "$postcss"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.71",
     "@ai-sdk/google": "^3.0.64",
     "@ai-sdk/openai": "^3.0.53",
-    "@supabase/supabase-js": "^2.106.2",
     "ai": "^6.0.168",
-    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "fast-xml-parser": "^5.8.0",
     "fflate": "^0.8.3",
@@ -34,8 +30,7 @@
     "recharts": "^2.15.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^2.6.0",
-    "zod": "^3.24.1",
-    "zustand": "^5.0.14"
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
