@@ -1,4 +1,4 @@
-import type { OpinionPayload, Position, SynthesisPayload } from "@/lib/types";
+import type { OpinionPayload, Position, SynthesisPayload, TqqtSignal } from "@/lib/types";
 
 const SEPARATOR = "---JSON---";
 
@@ -149,11 +149,9 @@ export function parseSynthesis(text: string): SynthesisPayload {
   const { body, jsonStr } = extractJson(text);
   const parsed = jsonStr ? tryParseJson(jsonStr) : {};
 
-  // summary는 반드시 JSON 필드에서. 없을 때만 본문에서 폴백 (전체 본문 노출 방지)
   const rawSummary = parsed.summary ? String(parsed.summary).trim() : "";
   const summary =
     rawSummary ||
-    // 본문이 너무 길면 첫 단락만 (마크다운 헤더 제거)
     extractFirstParagraph(body) ||
     "[종합 요약 파싱 실패] 모델 응답에서 summary 필드를 추출하지 못했습니다.";
 
@@ -197,6 +195,34 @@ export function parseSynthesis(text: string): SynthesisPayload {
     : [];
   const warning = parsed.warning ? String(parsed.warning) : undefined;
 
+  // tqqt_signal 파싱 (레버리지 티커 전용)
+  let tqqt_signal: TqqtSignal | undefined;
+  const raw = parsed.tqqt_signal;
+  if (raw && typeof raw === "object") {
+    const r = raw as Record<string, unknown>;
+    const action = String(r.action ?? "관망");
+    const normalizedAction =
+      action === "매수" ? "매수" : action === "공매도" ? "공매도" : "관망";
+    const regime = String(r.regime ?? "횡보장");
+    const normalizedRegime =
+      regime === "추세장" ? "추세장" : regime === "고변동" ? "고변동" : "횡보장";
+    const decay = String(r.decay_risk ?? "보통");
+    const normalizedDecay =
+      decay === "낮음" ? "낮음" : decay === "높음" ? "높음" : "보통";
+
+    tqqt_signal = {
+      action: normalizedAction as "매수" | "관망" | "공매도",
+      entry_score: clamp(Number(r.entry_score ?? 50), 0, 100),
+      regime: normalizedRegime as "추세장" | "횡보장" | "고변동",
+      entry_window: String(r.entry_window ?? "장 시작 30분 후"),
+      exit_window: String(r.exit_window ?? "장 마감 1시간 전"),
+      decay_risk: normalizedDecay as "낮음" | "보통" | "높음",
+      key_conditions: Array.isArray(r.key_conditions)
+        ? r.key_conditions.map(String).slice(0, 5)
+        : [],
+    };
+  }
+
   return {
     summary,
     consensus,
@@ -207,6 +233,7 @@ export function parseSynthesis(text: string): SynthesisPayload {
     fresh_insights,
     citations,
     warning,
+    ...(tqqt_signal ? { tqqt_signal } : {}),
   };
 }
 

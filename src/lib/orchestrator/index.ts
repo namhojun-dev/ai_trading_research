@@ -6,6 +6,7 @@ import type {
   QuoteSnapshot,
   StreamEvent,
 } from "@/lib/types";
+import { isLeveragedTicker } from "@/lib/types";
 import { callModel } from "@/lib/models";
 import { callPerplexitySynthesis } from "@/lib/models/perplexity";
 import {
@@ -13,6 +14,8 @@ import {
   buildRound1Prompt,
   buildRound2Prompt,
   buildRound3Prompt,
+  COMMON_INSTRUCTIONS_TQQT,
+  PERPLEXITY_SYNTHESIS_SYSTEM_TQQT,
 } from "@/lib/models/prompts";
 import { saveAnalysis } from "@/lib/data/history";
 import { fetchQuote } from "@/lib/data/quote";
@@ -30,15 +33,16 @@ export async function runAnalysis({ ticker, emit }: RunOptions): Promise<Analysi
   const startedAt = new Date().toISOString();
   const recordId = randomUUID();
   const opinions: ModelOpinion[] = [];
+  const isTqqt = isLeveragedTicker(ticker);
+  const systemPrompt = isTqqt ? COMMON_INSTRUCTIONS_TQQT : undefined;
 
-  // 시세 가져오기 (실패해도 계속 진행)
   const quote: QuoteSnapshot | null = await fetchQuote(ticker);
   emit({ type: "start", ticker, quote });
 
   // ===== Round 1 =====
   emit({ type: "round-begin", round: 1 });
-  const r1Prompt = buildRound1Prompt({ ticker, quote });
-  const r1Results = await runRoundParallel(MODEL_IDS, r1Prompt, 1, emit);
+  const r1Prompt = buildRound1Prompt({ ticker, quote, isTqqt });
+  const r1Results = await runRoundParallel(MODEL_IDS, r1Prompt, 1, emit, systemPrompt);
   opinions.push(...r1Results);
 
   // ===== Round 2 =====
@@ -46,26 +50,20 @@ export async function runAnalysis({ ticker, emit }: RunOptions): Promise<Analysi
   const r2Tasks = MODEL_IDS.map((selfModel) => {
     const ownR1 = r1Results.find((o) => o.modelId === selfModel)!;
     const othersR1 = r1Results.filter((o) => o.modelId !== selfModel);
-    const prompt = buildRound2Prompt({
-      ticker,
-      quote,
-      selfModel,
-      ownRound1: ownR1,
-      othersRound1: othersR1,
-    });
+    const prompt = buildRound2Prompt({ ticker, quote, selfModel, ownRound1: ownR1, othersRound1: othersR1, isTqqt });
     return { modelId: selfModel, prompt };
   });
   const r2Results = await Promise.all(
     r2Tasks.map(async ({ modelId, prompt }) => {
       try {
-        const payload = await callModel(modelId, prompt);
+        const payload = await callModel(modelId, prompt, systemPrompt);
         const opinion: ModelOpinion = { ...payload, modelId, round: 2 };
         emit({ type: "opinion", opinion });
         return opinion;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         emit({ type: "model-error", modelId, round: 2, message });
-        return placeholderOpinion(modelId, 2, message);
+        return errorOpinion(modelId, 2, message);
       }
     }),
   );
@@ -77,26 +75,20 @@ export async function runAnalysis({ ticker, emit }: RunOptions): Promise<Analysi
     const ownR1 = r1Results.find((o) => o.modelId === selfModel)!;
     const ownR2 = r2Results.find((o) => o.modelId === selfModel)!;
     const othersR2 = r2Results.filter((o) => o.modelId !== selfModel);
-    const prompt = buildRound3Prompt({
-      ticker,
-      selfModel,
-      ownRound1: ownR1,
-      ownRound2: ownR2,
-      othersRound2: othersR2,
-    });
+    const prompt = buildRound3Prompt({ ticker, selfModel, ownRound1: ownR1, ownRound2: ownR2, othersRound2: othersR2, isTqqt });
     return { modelId: selfModel, prompt };
   });
   const r3Results = await Promise.all(
     r3Tasks.map(async ({ modelId, prompt }) => {
       try {
-        const payload = await callModel(modelId, prompt);
+        const payload = await callModel(modelId, prompt, systemPrompt);
         const opinion: ModelOpinion = { ...payload, modelId, round: 3 };
         emit({ type: "opinion", opinion });
         return opinion;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         emit({ type: "model-error", modelId, round: 3, message });
-        return placeholderOpinion(modelId, 3, message);
+        return errorOpinion(modelId, 3, message);
       }
     }),
   );
@@ -106,14 +98,11 @@ export async function runAnalysis({ ticker, emit }: RunOptions): Promise<Analysi
   emit({ type: "synthesis-begin" });
   let synthesis = null as AnalysisRecord["synthesis"];
   try {
-    const synthPrompt = buildPerplexityPrompt({
-      ticker,
-      quote,
-      finalOpinions: r3Results,
-    });
+    const synthPrompt = buildPerplexityPrompt({ ticker, quote, finalOpinions: r3Results, isTqqt });
+    const perplexitySystem = isTqqt ? PERPLEXITY_SYNTHESIS_SYSTEM_TQQT : undefined;
     synthesis = await callPerplexitySynthesis(synthPrompt, (text) => {
       emit({ type: "synthesis-delta", text });
-    });
+    }, perplexitySystem);
     emit({ type: "synthesis", payload: synthesis });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -121,15 +110,7 @@ export async function runAnalysis({ ticker, emit }: RunOptions): Promise<Analysi
   }
 
   const finishedAt = new Date().toISOString();
-  const record: AnalysisRecord = {
-    id: recordId,
-    ticker,
-    startedAt,
-    finishedAt,
-    quote,
-    opinions,
-    synthesis,
-  };
+  const record: AnalysisRecord = { id: recordId, ticker, startedAt, finishedAt, quote, opinions, synthesis };
 
   try {
     await saveAnalysis(record);
@@ -146,28 +127,25 @@ async function runRoundParallel(
   prompt: string,
   round: 1 | 2 | 3,
   emit: EmitFn,
+  systemPrompt?: string,
 ): Promise<ModelOpinion[]> {
   return Promise.all(
     modelIds.map(async (modelId) => {
       try {
-        const payload = await callModel(modelId, prompt);
+        const payload = await callModel(modelId, prompt, systemPrompt);
         const opinion: ModelOpinion = { ...payload, modelId, round };
         emit({ type: "opinion", opinion });
         return opinion;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         emit({ type: "model-error", modelId, round, message });
-        return placeholderOpinion(modelId, round, message);
+        return errorOpinion(modelId, round, message);
       }
     }),
   );
 }
 
-function placeholderOpinion(
-  modelId: ModelId,
-  round: 1 | 2 | 3,
-  errorMessage: string,
-): ModelOpinion {
+function errorOpinion(modelId: ModelId, round: 1 | 2 | 3, errorMessage: string): ModelOpinion {
   return {
     modelId,
     round,

@@ -10,13 +10,13 @@ interface PerplexityResponse {
 export async function callPerplexitySynthesis(
   prompt: string,
   onDelta?: (text: string) => void,
+  systemPrompt?: string,
 ): Promise<SynthesisPayload> {
   const apiKey = process.env.PERPLEXITY_API_KEY;
   if (!apiKey) {
     throw new Error("PERPLEXITY_API_KEY가 설정되지 않았습니다.");
   }
 
-  // Sonar 모델은 실시간 웹 검색을 내장하고 있음
   const res = await fetch("https://api.perplexity.ai/chat/completions", {
     method: "POST",
     headers: {
@@ -24,11 +24,9 @@ export async function callPerplexitySynthesis(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      // sonar-reasoning-pro: 단계별 추론 + 실시간 웹 검색 + 풍부한 인용. 종합 분석에 최적.
-      // 더 깊은 자율 리서치가 필요하면 'sonar-deep-research'(비용 ↑) 사용 가능.
       model: "sonar-reasoning-pro",
       messages: [
-        { role: "system", content: PERPLEXITY_SYNTHESIS_SYSTEM },
+        { role: "system", content: systemPrompt ?? PERPLEXITY_SYNTHESIS_SYSTEM },
         { role: "user", content: prompt },
       ],
       temperature: 0.3,
