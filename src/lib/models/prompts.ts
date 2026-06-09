@@ -194,6 +194,7 @@ ${tqqtNote}
 const MODEL_DISPLAY: Record<ModelId, string> = {
   gpt: "GPT (OpenAI)",
   gemini: "Gemini (Google)",
+  claude: "Claude (Anthropic)",
 };
 
 function formatPriorOpinion(op: ModelOpinion): string {
@@ -280,6 +281,7 @@ ${tqqtNote}
 const MODEL_DISPLAY_ALL: Record<ModelId, string> = {
   gpt: "GPT (OpenAI)",
   gemini: "Gemini (Google)",
+  claude: "Claude (Anthropic)",
 };
 
 export function buildPerplexityPrompt(args: {

@@ -290,7 +290,7 @@ export interface KfinHealthReport {
   summary: Record<DataStatus, number>;
 }
 
-export type ModelId = "gpt" | "gemini";
+export type ModelId = "gpt" | "gemini" | "claude";
 
 export interface ModelMeta {
   id: ModelId;
@@ -316,6 +316,13 @@ export const MODELS: ModelMeta[] = [
     provider: "Google",
     accent: "#4285f4",
     icon: "/icons/gemini.png",
+  },
+  {
+    id: "claude",
+    label: "Claude",
+    provider: "Anthropic",
+    accent: "#d97757",
+    icon: "/icons/claude.png",
   },
 ];
 

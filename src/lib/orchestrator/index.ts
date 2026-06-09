@@ -20,7 +20,7 @@ import {
 import { saveAnalysis } from "@/lib/data/history";
 import { fetchQuote } from "@/lib/data/quote";
 
-const MODEL_IDS: ModelId[] = ["gpt", "gemini"];
+const MODEL_IDS: ModelId[] = ["gpt", "gemini", "claude"];
 
 type EmitFn = (evt: StreamEvent) => void;
 
