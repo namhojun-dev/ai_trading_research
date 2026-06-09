@@ -1,0 +1,59 @@
+version: "1.0"
+description: "코스닥 단기 스윙 트레이딩 스킬셋 — tradermonty/claude-trading-skills 기반 한국 시장 맞춤 버전"
+
+skills:
+  - name: kosdaq-regime-check
+    category: market-regime
+    status: production
+    description: "코스닥 시장 국면 판단 (상승/하락/횡보), 외국인 수급, 테마 활성도 체크"
+    frequency: daily
+    duration_min: 10
+    api_required: false
+
+  - name: kosdaq-value-screener
+    category: swing-opportunity
+    status: production
+    description: "저PER + 저PBR + 흑자 + 거래대금 필터 기반 코스닥 저평가 스윙 후보 발굴"
+    frequency: daily
+    duration_min: 15
+    api_required: false
+
+  - name: kosdaq-position-sizer
+    category: trade-planning
+    status: production
+    description: "계좌 대비 최대 손실 한도 기준으로 진입 수량 역산. 코스닥 ±30% 제한 반영"
+    frequency: per-trade
+    duration_min: 2
+    api_required: false
+
+  - name: kosdaq-trade-journal
+    category: trade-memory
+    status: production
+    description: "매매 이유, 결과, 반성 기록. 테마별 승률 추적"
+    frequency: daily
+    duration_min: 10
+    api_required: false
+
+  - name: kosdaq-theme-detector
+    category: market-regime
+    status: production
+    description: "현재 코스닥 주도 테마 식별, 테마 지속 기간 추정, 테마별 핵심 종목 정리"
+    frequency: daily
+    duration_min: 10
+    api_required: false
+
+workflows:
+  - name: daily-premarket
+    skills_sequence:
+      - kosdaq-regime-check
+      - kosdaq-theme-detector
+      - kosdaq-value-screener
+    total_duration_min: 30
+    description: "장 시작 전 30분 루틴 — 시장 국면 → 테마 → 후보 종목 순서"
+
+  - name: swing-entry-checklist
+    skills_sequence:
+      - kosdaq-position-sizer
+      - kosdaq-trade-journal
+    total_duration_min: 5
+    description: "진입 직전 체크리스트 — 포지션 사이징 → 일지 기록"
