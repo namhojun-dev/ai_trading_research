@@ -41,6 +41,28 @@ export async function listAnalyses(limit = 50): Promise<AnalysisRecord[]> {
   return records;
 }
 
+export async function listByTicker(ticker: string, limit = 100): Promise<AnalysisRecord[]> {
+  await ensureDir();
+  const files = await fs.readdir(HISTORY_DIR);
+  const upper = ticker.toUpperCase();
+  const jsonFiles = files
+    .filter((f) => f.endsWith(".json") && !f.startsWith(".") && f.toUpperCase().includes(`_${upper}.`))
+    .sort()
+    .reverse()
+    .slice(0, limit);
+
+  const records: AnalysisRecord[] = [];
+  for (const f of jsonFiles) {
+    try {
+      const content = await fs.readFile(path.join(HISTORY_DIR, f), "utf-8");
+      records.push(JSON.parse(content));
+    } catch {
+      // skip corrupt files
+    }
+  }
+  return records;
+}
+
 export async function getAnalysis(id: string): Promise<AnalysisRecord | null> {
   await ensureDir();
   const files = await fs.readdir(HISTORY_DIR);

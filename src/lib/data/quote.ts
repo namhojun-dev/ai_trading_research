@@ -1,4 +1,5 @@
-import type { QuoteSnapshot } from "@/lib/types";
+import type { DataFreshness, QuoteSnapshot } from "@/lib/types";
+import { fetchWithTimeout } from "./fetch";
 
 interface YahooChartMeta {
   symbol: string;
@@ -15,7 +16,6 @@ interface YahooChartMeta {
 
 interface YahooChartResult {
   meta: YahooChartMeta;
-  timestamp?: number[];
   indicators?: {
     quote?: { close?: (number | null)[]; volume?: (number | null)[] }[];
   };
@@ -28,68 +28,115 @@ interface YahooChartResponse {
   };
 }
 
-export async function fetchQuote(symbol: string): Promise<QuoteSnapshot | null> {
+export function normalizeSymbol(symbol: string): string | null {
   const ticker = symbol.toUpperCase().trim();
-  if (!/^[A-Z.\-]{1,10}$/.test(ticker)) return null;
+  return /^[A-Z0-9.^=\-]{1,16}$/.test(ticker) ? ticker : null;
+}
+
+export function statusSnapshot(
+  symbol: string,
+  status: DataFreshness["status"],
+  message: string,
+): QuoteSnapshot {
+  const now = new Date().toISOString();
+  return {
+    symbol,
+    shortName: null,
+    price: null,
+    change: null,
+    changePercent: null,
+    marketCap: null,
+    volume: null,
+    currency: "USD",
+    exchange: null,
+    fetchedAt: now,
+    freshness: {
+      status,
+      source: "Yahoo Finance chart API",
+      fetchedAt: status === "error" ? now : null,
+      message,
+    },
+  };
+}
+
+export async function fetchQuote(symbol: string): Promise<QuoteSnapshot> {
+  const ticker = normalizeSymbol(symbol);
+  if (!ticker) {
+    return statusSnapshot(symbol, "no_data", "지원하지 않는 심볼 형식입니다.");
+  }
+
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+    ticker,
+  )}?interval=1d&range=7d`;
 
   try {
-    // range=7d: 최근 거래일 5~7개를 받아 close[-2]를 진짜 직전 거래일 종가로 사용.
-    // chartPreviousClose는 "range 시작 직전 종가"라 잘못된 기준 (예: range=2d면 3일 전 종가).
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=7d`;
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
         Accept: "application/json",
       },
       next: { revalidate: 30 },
-    });
+    }, 7000);
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      return statusSnapshot(ticker, "error", `시세 공급자가 HTTP ${res.status}를 반환했습니다.`);
+    }
+
     const data = (await res.json()) as YahooChartResponse;
+    const providerError = data.chart?.error;
+    if (providerError) {
+      return statusSnapshot(
+        ticker,
+        "error",
+        providerError.description || providerError.code || "시세 공급자 오류입니다.",
+      );
+    }
+
     const result = data.chart?.result?.[0];
     const meta = result?.meta;
-    if (!meta || meta.regularMarketPrice === undefined) return null;
+    if (!meta || typeof meta.regularMarketPrice !== "number") {
+      return statusSnapshot(ticker, "no_data", "해당 심볼의 가격 데이터가 없습니다.");
+    }
 
     const price = meta.regularMarketPrice;
-
-    // 직전 거래일 종가: close 배열에서 마지막 유효값의 직전(끝-2)
-    // close[-1]은 오늘(또는 가장 최신) 종가/현재가이고, close[-2]가 진짜 어제 종가.
     const closes = (result?.indicators?.quote?.[0]?.close ?? []).filter(
-      (c): c is number => typeof c === "number" && Number.isFinite(c),
+      (close): close is number => typeof close === "number" && Number.isFinite(close),
     );
-    let prevClose: number;
+
+    let prevClose = meta.chartPreviousClose ?? meta.previousClose ?? price;
     if (closes.length >= 2) {
-      // 마지막 close가 현재가와 거의 같으면 그게 "오늘" → 직전(끝-2) 사용
-      // 다르면 마지막 close 자체가 직전 거래일 (장 시작 전 등)
       const last = closes[closes.length - 1];
-      const isLastToday = Math.abs(last - price) < 0.01;
-      prevClose = isLastToday ? closes[closes.length - 2] : last;
+      prevClose = Math.abs(last - price) < 0.01 ? closes[closes.length - 2] : last;
     } else if (closes.length === 1) {
       prevClose = closes[0];
-    } else {
-      // 폴백: chartPreviousClose (정확하지 않지만 없으면 0% 표시 방지)
-      prevClose = meta.chartPreviousClose ?? meta.previousClose ?? price;
     }
 
     const change = price - prevClose;
     const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
+    const fetchedAt = new Date().toISOString();
 
     return {
-      symbol: meta.symbol,
+      symbol: meta.symbol || ticker,
       shortName: meta.shortName ?? meta.longName ?? null,
       price,
       change,
       changePercent,
-      // v8 chart에는 시총이 없음
       marketCap: null,
       volume: meta.regularMarketVolume ?? null,
       currency: meta.currency ?? "USD",
       exchange: meta.fullExchangeName ?? meta.exchangeName ?? null,
-      fetchedAt: new Date().toISOString(),
+      fetchedAt,
+      freshness: {
+        status: "delayed",
+        source: "Yahoo Finance chart API",
+        fetchedAt,
+        delayMinutes: 15,
+        message: "무료 공개 시세는 거래소와 상품에 따라 지연될 수 있습니다.",
+      },
     };
   } catch (err) {
-    console.error("[fetchQuote] failed:", err);
-    return null;
+    const message = err instanceof Error ? err.message : String(err);
+    return statusSnapshot(ticker, "error", message);
   }
 }

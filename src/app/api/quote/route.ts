@@ -7,11 +7,16 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const symbol = req.nextUrl.searchParams.get("symbol")?.trim();
   if (!symbol) {
-    return Response.json({ error: "symbol 파라미터 필요" }, { status: 400 });
+    return Response.json(
+      {
+        error: "symbol 파라미터가 필요합니다.",
+        status: "no_data",
+      },
+      { status: 400 },
+    );
   }
+
   const quote = await fetchQuote(symbol);
-  if (!quote) {
-    return Response.json({ error: "시세를 가져올 수 없습니다." }, { status: 404 });
-  }
-  return Response.json(quote);
+  const httpStatus = quote.freshness.status === "no_data" ? 404 : 200;
+  return Response.json(quote, { status: httpStatus });
 }
