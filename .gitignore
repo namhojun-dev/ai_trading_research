@@ -27,6 +27,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+.lifeos-dev-*.log
+.next-dev*.log
+.next-dev*.err.log
 
 # env files (do NOT commit secrets)
 .env*
@@ -42,9 +45,15 @@ yarn-error.log*
 # local data
 /data/history/*.json
 !/data/history/.gitkeep
+/data/kfin-terminal/*.json
 
 # Claude Code local settings
 .claude/
+
+# Codex CLI tooling artifacts (not part of the project)
+.codex/
+.codex-remote/
+.codex-appserver-schema/
 
 # OS / editor cruft
 Thumbs.db
