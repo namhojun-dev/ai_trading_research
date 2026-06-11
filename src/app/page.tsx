@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import Link from "next/link";
 import { Activity } from "lucide-react";
 import { TickerSearch } from "@/components/TickerSearch";
 import { PriceHeader } from "@/components/PriceHeader";
@@ -9,6 +10,10 @@ import { DiscussionGrid } from "@/components/DiscussionGrid";
 import { SynthesisPanel } from "@/components/SynthesisPanel";
 import { Disclaimer } from "@/components/Disclaimer";
 import { ModelIcon } from "@/components/ModelIcon";
+import {
+  ComparableValuationPanel,
+  type ComparableResult,
+} from "@/components/ComparableValuationPanel";
 import {
   MODELS,
   PERPLEXITY_META,
@@ -42,18 +47,60 @@ const initialState: AnalysisState = {
   error: null,
 };
 
+// 한국 종목(6자리 코드 / 한글명 / .KS·.KQ)이면 유사 종목 비교(국내 전용)를,
+// 그 외(미국 티커)면 멀티 LLM 분석을 수행한다.
+function isKoreanTicker(t: string): boolean {
+  const s = t.trim();
+  return /^\d{6}$/.test(s) || /[가-힣]/.test(s) || /\.(ks|kq)$/i.test(s);
+}
+
 export default function HomePage() {
   const [state, setState] = useState<AnalysisState>(initialState);
   const [running, setRunning] = useState(false);
+  const [krMode, setKrMode] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+
+  // 유사 종목 비교 (독립 기능 — /api/analyze SSE와 분리)
+  const [comparables, setComparables] = useState<ComparableResult | null>(null);
+  const [comparablesLoading, setComparablesLoading] = useState(false);
+  const [comparablesError, setComparablesError] = useState<string | null>(null);
+
+  const loadComparables = useCallback(async (ticker: string) => {
+    setComparables(null);
+    setComparablesError(null);
+    setComparablesLoading(true);
+    try {
+      const res = await fetch(`/api/comparables?ticker=${encodeURIComponent(ticker)}`);
+      const data = (await res.json()) as ComparableResult;
+      setComparables(data);
+    } catch (err) {
+      setComparablesError(err instanceof Error ? err.message : "비교 분석 실패");
+    } finally {
+      setComparablesLoading(false);
+    }
+  }, []);
 
   const handleSubmit = useCallback(async (ticker: string) => {
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
 
-    setRunning(true);
+    const korean = isKoreanTicker(ticker);
+    setKrMode(korean);
     setState({ ...initialState, ticker });
+
+    if (korean) {
+      // 한국 종목: 미국 전용 LLM 분석은 건너뛰고 유사 종목 비교만 수행
+      setRunning(false);
+      void loadComparables(ticker);
+      return;
+    }
+
+    // 미국 종목: 멀티 LLM 분석 수행 (비교 기능은 국내 전용이라 비활성화)
+    setComparables(null);
+    setComparablesError(null);
+    setComparablesLoading(false);
+    setRunning(true);
 
     try {
       const res = await fetch("/api/analyze", {
@@ -103,7 +150,7 @@ export default function HomePage() {
     } finally {
       setRunning(false);
     }
-  }, []);
+  }, [loadComparables]);
 
   function applyEvent(evt: StreamEvent) {
     setState((s) => {
@@ -161,7 +208,7 @@ export default function HomePage() {
   return (
     <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       {/* Header */}
-      <header className="mb-10">
+      <header className="mb-10 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500 shadow-lg shadow-emerald-500/20">
             <ModelIcon model={PERPLEXITY_META} size={22} className="opacity-90" />
@@ -171,37 +218,43 @@ export default function HomePage() {
               <span className="text-gradient-brand">AI Compete</span>
             </h1>
             <p className="text-xs text-[var(--color-muted-foreground)]">
-              GPT · Gemini 3 라운드 토론 + Perplexity 실시간 종합
+              미국 티커 멀티 LLM 분석 · 한국 종목 유사 종목 비교
             </p>
           </div>
         </div>
+        <Link
+          href="/screener"
+          className="shrink-0 rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs font-medium text-[var(--color-muted-foreground)] transition hover:border-emerald-500/40 hover:text-emerald-300"
+        >
+          섹터 저평가 스크리너 →
+        </Link>
       </header>
 
       {/* Search */}
       <section className="mb-10 flex flex-col items-center gap-4">
         <TickerSearch onSubmit={handleSubmit} disabled={running} />
-        {!hasResult && !running && (
+        {!hasResult && !running && !comparables && !comparablesLoading && (
           <p className="text-center text-sm text-[var(--color-muted)]">
-            미국 주식 티커를 입력하면 GPT와 Gemini가 실시간 서치로 포지션을 분석합니다.
+            <span className="text-foreground/80">미국 티커</span>(예: AAPL) → GPT·Gemini·Claude {MODELS.length}개 모델 토론 분석
             <br />
-            <span className="text-xs">
-              참여 모델 <span className="font-mono font-semibold text-emerald-400">{MODELS.length}개</span>
-              {" · "}예상 소요 30~75초
-            </span>
+            <span className="text-foreground/80">한국 종목</span>(예: 005930 · 삼성전자) → 유사 종목 PER·EPS 저평가 비교
           </p>
         )}
       </section>
 
-      {/* Error */}
-      {state.error && (
+      {/* Error (미국 분석 모드에서만) */}
+      {!krMode && state.error && (
         <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-300">
           오류: {state.error}
         </div>
       )}
 
       {/* Result */}
-      {(state.ticker || hasResult || running) && (
+      {(state.ticker || hasResult || running || comparables || comparablesLoading) && (
         <div className="space-y-8">
+          {/* === 미국 멀티 LLM 분석 (한국 모드에서는 숨김) === */}
+          {!krMode && (
+          <>
           {/* Price */}
           <PriceHeader ticker={state.ticker} quote={state.quote} />
 
@@ -255,6 +308,17 @@ export default function HomePage() {
                 partialText={state.synthesisPartial}
               />
             </section>
+          )}
+          </>
+          )}
+
+          {/* === 유사 종목 밸류에이션 비교 (한국 종목 전용) === */}
+          {(comparablesLoading || comparablesError || comparables) && (
+            <ComparableValuationPanel
+              loading={comparablesLoading}
+              error={comparablesError}
+              data={comparables}
+            />
           )}
         </div>
       )}

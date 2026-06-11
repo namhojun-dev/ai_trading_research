@@ -29,6 +29,7 @@ yarn-error.log*
 .pnpm-debug.log*
 .next-dev*.log
 .next-dev*.err.log
+.next-prod*.log
 
 # env files (do NOT commit secrets)
 .env*
@@ -45,6 +46,9 @@ yarn-error.log*
 /data/history/*.json
 !/data/history/.gitkeep
 /data/kfin-terminal/*.json
+# comparables / screener runtime caches (incl. DART corpCode map)
+/data/comparables/
+/data/screener/
 
 # Claude Code local settings
 .claude/
