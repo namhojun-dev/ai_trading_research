@@ -222,12 +222,20 @@ export default function HomePage() {
             </p>
           </div>
         </div>
-        <Link
-          href="/screener"
-          className="shrink-0 rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs font-medium text-[var(--color-muted-foreground)] transition hover:border-emerald-500/40 hover:text-emerald-300"
-        >
-          섹터 저평가 스크리너 →
-        </Link>
+        <nav className="flex shrink-0 items-center gap-2">
+          <Link
+            href="/13f"
+            className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs font-medium text-[var(--color-muted-foreground)] transition hover:border-emerald-500/40 hover:text-emerald-300"
+          >
+            13F 기관 보유 →
+          </Link>
+          <Link
+            href="/screener"
+            className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs font-medium text-[var(--color-muted-foreground)] transition hover:border-emerald-500/40 hover:text-emerald-300"
+          >
+            섹터 스크리너 →
+          </Link>
+        </nav>
       </header>
 
       {/* Search */}

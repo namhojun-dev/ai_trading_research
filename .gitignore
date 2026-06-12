@@ -46,9 +46,10 @@ yarn-error.log*
 /data/history/*.json
 !/data/history/.gitkeep
 /data/kfin-terminal/*.json
-# comparables / screener runtime caches (incl. DART corpCode map)
+# comparables / screener / 13f runtime caches
 /data/comparables/
 /data/screener/
+/data/thirteenf/
 
 # Claude Code local settings
 .claude/
