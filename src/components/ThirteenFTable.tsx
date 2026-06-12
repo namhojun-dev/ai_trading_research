@@ -35,8 +35,8 @@ export function ThirteenFTable({ rows }: { rows: Holding[] }) {
         <thead>
           <tr className="border-b border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-muted)]">
             <th className="px-2 py-2 text-center">순위</th>
+            <th className="px-2 py-2 text-left">티커</th>
             <th className="px-2 py-2 text-left">종목 (발행사)</th>
-            <th className="px-2 py-2 text-left">CUSIP</th>
             <th className="px-2 py-2">평가액</th>
             <th className="px-2 py-2">비중</th>
             <th className="px-2 py-2">보유주식</th>
@@ -55,6 +55,15 @@ export function ThirteenFTable({ rows }: { rows: Holding[] }) {
                 <td className="px-2 py-2 text-center font-mono font-semibold text-emerald-400">
                   {h.rank}
                 </td>
+                <td className="px-2 py-2 text-left font-mono font-semibold">
+                  {h.ticker ? (
+                    <span className="text-cyan-300">{h.ticker}</span>
+                  ) : (
+                    <span className="text-[var(--color-muted)]" title={`CUSIP ${h.cusip}`}>
+                      —
+                    </span>
+                  )}
+                </td>
                 <td className="px-2 py-2 text-left font-medium">
                   {h.issuer}
                   {h.putCall && (
@@ -62,9 +71,7 @@ export function ThirteenFTable({ rows }: { rows: Holding[] }) {
                       {h.putCall}
                     </span>
                   )}
-                </td>
-                <td className="px-2 py-2 text-left font-mono text-[10px] text-[var(--color-muted)]">
-                  {h.cusip}
+                  <span className="ml-1.5 font-mono text-[10px] text-[var(--color-muted)]">{h.cusip}</span>
                 </td>
                 <td className="px-2 py-2 font-mono">{usd(h.value)}</td>
                 <td className="px-2 py-2 font-mono">{h.pct.toFixed(1)}%</td>

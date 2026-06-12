@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { getRecent13F, fetchInfoTable, type RawHolding } from "./edgar";
 import { findManager } from "./managers";
+import { resolveTickers } from "./cusip";
 import type { ChangeType, ExitedHolding, Holding, ThirteenFResult } from "./types";
 
 export { MANAGERS } from "./managers";
@@ -85,6 +86,7 @@ export async function get13F(cikInput: string): Promise<ThirteenFResult> {
       return {
         issuer: r.issuer,
         cusip: r.cusip,
+        ticker: null as string | null,
         titleOfClass: r.titleOfClass,
         putCall: r.putCall,
         value: r.value,
@@ -97,6 +99,10 @@ export async function get13F(cikInput: string): Promise<ThirteenFResult> {
     })
     .sort((a, b) => b.value - a.value)
     .map((h, i) => ({ ...h, rank: i + 1 }));
+
+  // CUSIP → 티커 (평가액순으로 상위부터 조회). 실패/미해결은 null 유지.
+  const tickerMap = await resolveTickers(holdings.map((h) => h.cusip));
+  for (const h of holdings) h.ticker = tickerMap[h.cusip.toUpperCase()] ?? null;
 
   // 직전 분기엔 있었으나 이번엔 사라진(전량 청산) 종목
   const exited: ExitedHolding[] = [...prevAgg.entries()]

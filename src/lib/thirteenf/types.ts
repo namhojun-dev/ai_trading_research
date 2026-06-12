@@ -6,6 +6,7 @@ export type Holding = {
   rank?: number;
   issuer: string;
   cusip: string;
+  ticker: string | null;
   titleOfClass: string;
   putCall?: string | null;
   value: number; // USD
